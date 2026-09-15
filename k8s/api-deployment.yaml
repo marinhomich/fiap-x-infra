@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fiap-x-api
+  namespace: default
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: fiap-x-api
+  template:
+    metadata:
+      labels:
+        app: fiap-x-api
+    spec:
+      containers:
+        - name: fiap-x-api
+          image: fiapx/fiap-x-api-service:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DB_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: fiapx-config
+                  key: DB_URL
+            - name: DB_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: fiapx-config
+                  key: DB_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: fiapx-secrets
+                  key: DB_PASSWORD
+            - name: RABBITMQ_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: fiapx-config
+                  key: RABBITMQ_HOST
+            - name: RABBITMQ_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: fiapx-config
+                  key: RABBITMQ_PORT
+            - name: STORAGE_PATH
+              valueFrom:
+                configMapKeyRef:
+                  name: fiapx-config
+                  key: STORAGE_PATH
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: fiapx-secrets
+                  key: JWT_SECRET
+          volumeMounts:
+            - name: storage-volume
+              mountPath: /app/storage_data
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "300m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 15
+      volumes:
+        - name: storage-volume
+          persistentVolumeClaim:
+            claimName: fiapx-storage-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fiap-x-api-service
+  namespace: default
+spec:
+  type: LoadBalancer
+  selector:
+    app: fiap-x-api
+  ports:
+    - port: 80
+      targetPort: 8080

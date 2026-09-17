@@ -6,6 +6,13 @@ terraform {
       version = "~> 5.0"
     }
   }
+
+  # State remoto: permite que o pipeline do GitHub Actions aplique o Terraform
+  # de forma incremental (o bucket já existe e é o mesmo das fases anteriores).
+  backend "gcs" {
+    bucket = "fiap-oficina-terraform-state-2026"
+    prefix = "terraform/state/fiapx"
+  }
 }
 
 provider "google" {

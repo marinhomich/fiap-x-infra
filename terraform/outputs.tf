@@ -17,3 +17,8 @@ output "postgres_instance_ip" {
   description = "IP da Instância Cloud SQL PostgreSQL"
   value       = google_sql_database_instance.fiapx_postgres.public_ip_address
 }
+
+output "artifact_registry_url" {
+  description = "URL do repositório Docker no Artifact Registry"
+  value       = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.fiapx_repo.repository_id}"
+}

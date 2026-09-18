@@ -66,6 +66,14 @@ resource "google_container_node_pool" "primary_nodes" {
   }
 }
 
+# Artifact Registry: imagens Docker publicadas pelos pipelines de CD dos microsserviços
+resource "google_artifact_registry_repository" "fiapx_repo" {
+  repository_id = "fiapx-repo"
+  location      = var.region
+  format        = "DOCKER"
+  description   = "Imagens Docker do FIAP X (API Service e Video Processor)"
+}
+
 # Cloud Storage Bucket para Mídias & Zips
 resource "google_storage_bucket" "fiapx_media_bucket" {
   name          = "fiapx-media-storage-${var.project_id}"

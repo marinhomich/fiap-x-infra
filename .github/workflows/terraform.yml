@@ -1,0 +1,45 @@
+name: "Terraform - FIAP X Infra (GKE, Cloud SQL, Storage, Artifact Registry)"
+
+on:
+  push:
+    branches: [ main ]
+    paths: [ 'terraform/**', '.github/workflows/terraform.yml' ]
+  pull_request:
+    branches: [ main ]
+    paths: [ 'terraform/**', '.github/workflows/terraform.yml' ]
+  workflow_dispatch:
+
+jobs:
+  terraform:
+    name: "Terraform Plan/Apply"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./terraform
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.5.7
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan -input=false -var="project_id=${{ secrets.GCP_PROJECT_ID }}"
+
+      - name: Terraform Apply
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        run: terraform apply -auto-approve -input=false -var="project_id=${{ secrets.GCP_PROJECT_ID }}"

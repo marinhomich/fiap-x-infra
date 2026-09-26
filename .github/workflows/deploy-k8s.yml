@@ -1,0 +1,71 @@
+name: "Deploy K8s - FIAP X (manifestos, secrets e HPA)"
+
+on:
+  push:
+    branches: [ main ]
+    paths: [ 'k8s/**', '.github/workflows/deploy-k8s.yml' ]
+  # Rodar manualmente logo após o primeiro "terraform apply" (cluster recém-criado)
+  workflow_dispatch:
+
+env:
+  REGION: us-central1
+  GKE_CLUSTER: fiapx-gke-cluster
+  REGISTRY: us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/fiapx-repo
+
+jobs:
+  deploy:
+    name: "kubectl apply no GKE"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Get GKE Credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ env.GKE_CLUSTER }}
+          location: ${{ env.REGION }}
+
+      # Os manifestos referenciam imagens locais (fiapx/...:latest, usadas no minikube/kind);
+      # no GKE elas apontam para o Artifact Registry alimentado pelos pipelines dos microsserviços.
+      - name: Point Images to Artifact Registry
+        run: |-
+          sed -i "s|image: fiapx/fiap-x-api-service:latest|image: $REGISTRY/fiap-x-api-service:latest|" k8s/api-deployment.yaml
+          sed -i "s|image: fiapx/fiap-x-video-processor:latest|image: $REGISTRY/fiap-x-video-processor:latest|" k8s/processor-deployment.yaml
+          grep -n "image:" k8s/api-deployment.yaml k8s/processor-deployment.yaml
+
+      # Em produção os segredos vêm dos GitHub Secrets; k8s/secrets.yaml só é usado em ambiente local
+      - name: Create/Update Kubernetes Secret
+        env:
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          RABBITMQ_PASSWORD: ${{ secrets.RABBITMQ_PASSWORD }}
+        run: |-
+          kubectl create secret generic fiapx-secrets \
+            --from-literal=DB_PASSWORD="$DB_PASSWORD" \
+            --from-literal=JWT_SECRET="$JWT_SECRET" \
+            --from-literal=RABBITMQ_PASSWORD="${RABBITMQ_PASSWORD:-guest}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Apply Manifests
+        run: |-
+          kubectl apply -f k8s/configmap.yaml
+          kubectl apply -f k8s/storage-pvc.yaml
+          kubectl apply -f k8s/postgres.yaml
+          kubectl apply -f k8s/rabbitmq.yaml
+          kubectl rollout status deployment/postgres --timeout=300s
+          kubectl rollout status deployment/rabbitmq --timeout=300s
+          kubectl apply -f k8s/api-deployment.yaml
+          kubectl apply -f k8s/processor-deployment.yaml
+
+      - name: Wait for Rollout
+        run: |-
+          kubectl rollout status deployment/fiap-x-api --timeout=600s
+          kubectl rollout status deployment/fiap-x-processor --timeout=600s
+          kubectl get pods,svc,hpa

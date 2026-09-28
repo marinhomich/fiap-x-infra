@@ -15,6 +15,9 @@ env:
 jobs:
   deploy:
     name: "kubectl apply no GKE"
+    # Deploy desligado por padrão (evita custos no GCP): só roda se a variável de
+    # repositório ENABLE_GCP_DEPLOY for 'true'.
+    if: vars.ENABLE_GCP_DEPLOY == 'true'
     runs-on: ubuntu-latest
 
     steps:

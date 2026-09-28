@@ -10,8 +10,35 @@ on:
   workflow_dispatch:
 
 jobs:
-  terraform:
+  # Roda sempre e não precisa de credenciais: valida sintaxe e referências sem tocar no GCP
+  validate:
+    name: "Terraform Validate (offline)"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./terraform
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.5.7
+
+      - name: Terraform Init (sem backend remoto)
+        run: terraform init -backend=false
+
+      - name: Terraform Validate
+        run: terraform validate
+
+  # Provisionamento real desligado por padrão (evita custos no GCP): só roda se a
+  # variável de repositório ENABLE_GCP_DEPLOY for 'true'.
+  plan-apply:
     name: "Terraform Plan/Apply"
+    needs: validate
+    if: vars.ENABLE_GCP_DEPLOY == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -33,9 +60,6 @@ jobs:
 
       - name: Terraform Init
         run: terraform init
-
-      - name: Terraform Validate
-        run: terraform validate
 
       - name: Terraform Plan
         run: terraform plan -input=false -var="project_id=${{ secrets.GCP_PROJECT_ID }}"

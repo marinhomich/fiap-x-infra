@@ -2,8 +2,6 @@
 # Clone os três repositórios lado a lado e rode, a partir desta pasta:
 #   docker compose up -d --build
 
-version: '3.8'
-
 services:
   postgres:
     image: postgres:16-alpine

@@ -1,0 +1,103 @@
+# FIAP X - ambiente local completo (PostgreSQL, RabbitMQ, API e Worker).
+# Clone os três repositórios lado a lado e rode, a partir desta pasta:
+#   docker compose up -d --build
+
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: fiapx-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: fiapx_db
+      POSTGRES_USER: fiapx_user
+      POSTGRES_PASSWORD: fiapx_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fiapx_user -d fiapx_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - fiapx-network
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: fiapx-rabbitmq
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - fiapx-network
+
+  fiap-x-api:
+    build:
+      context: ../fiap-x-api-service
+      dockerfile: Dockerfile
+    container_name: fiapx-api
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/fiapx_db
+      DB_USER: fiapx_user
+      DB_PASSWORD: fiapx_pass
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      STORAGE_PATH: /app/storage_data
+      JWT_SECRET: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+    volumes:
+      - shared_storage:/app/storage_data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - fiapx-network
+
+  fiap-x-processor:
+    build:
+      context: ../fiap-x-video-processor
+      dockerfile: Dockerfile
+    container_name: fiapx-processor
+    restart: always
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/fiapx_db
+      DB_USER: fiapx_user
+      DB_PASSWORD: fiapx_pass
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      STORAGE_PATH: /app/storage_data
+      WORKER_CONCURRENCY: 2
+      WORKER_MAX_CONCURRENCY: 5
+    volumes:
+      - shared_storage:/app/storage_data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - fiapx-network
+
+volumes:
+  postgres_data:
+  shared_storage:
+
+networks:
+  fiapx-network:
+    driver: bridge

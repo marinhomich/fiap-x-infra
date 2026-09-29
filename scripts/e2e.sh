@@ -12,8 +12,17 @@ RABBIT="${RABBIT_URL:-http://localhost:15672}"
 WORK="$(mktemp -d)"
 TIMEOUT="${E2E_TIMEOUT:-180}"
 
-pass() { echo "  [OK] $*"; }
-fail() { echo "  [FALHOU] $*" >&2; exit 1; }
+LAST_OK="(nenhum)"
+pass() { echo "  [OK] $*"; LAST_OK="$*"; }
+# No GitHub Actions a falha também vira anotação (::error), visível sem baixar o log.
+annotate() { [ -n "${GITHUB_ACTIONS:-}" ] || return 0; printf '::error title=%s::%s\n' "$1" "$(printf '%s' "$2" | head -c 4000 | awk 'BEGIN{ORS="%0A"} {gsub(/%/,"%25"); gsub(/\r/,""); print}')"; }
+fail() {
+  echo "  [FALHOU] $*" >&2
+  annotate "E2E falhou" "$*
+Último passo OK: $LAST_OK
+Última resposta: $(head -c 1500 "$WORK/resp" 2>/dev/null)"
+  exit 1
+}
 step() { echo; echo "== $*"; }
 
 # Executa uma requisição e confere o status HTTP. Corpo da resposta vai para $WORK/resp.

@@ -1,0 +1,58 @@
+name: "E2E - FIAP X (docker compose + roteiro de validação)"
+
+# Sobe o ambiente completo com o docker-compose (sem nuvem) e executa o roteiro de
+# validação do relatório: cadastro, login, envio, status, download, paralelismo,
+# falha com DLQ e isolamento entre usuários.
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    name: "Teste de ponta a ponta"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout fiap-x-infra
+        uses: actions/checkout@v4
+        with:
+          path: fiap-x-infra
+
+      - name: Checkout fiap-x-api-service
+        uses: actions/checkout@v4
+        with:
+          repository: marinhomich/fiap-x-api-service
+          path: fiap-x-api-service
+
+      - name: Checkout fiap-x-video-processor
+        uses: actions/checkout@v4
+        with:
+          repository: marinhomich/fiap-x-video-processor
+          path: fiap-x-video-processor
+
+      - name: Install FFmpeg (gera os vídeos de teste)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+
+      - name: Build & Start (docker compose)
+        working-directory: fiap-x-infra
+        run: docker compose up -d --build
+
+      - name: Run E2E
+        working-directory: fiap-x-infra
+        run: bash scripts/e2e.sh
+
+      - name: Container Logs
+        if: always()
+        working-directory: fiap-x-infra
+        run: |
+          docker compose ps
+          docker compose logs --no-color --tail=200 fiap-x-api fiap-x-processor
+
+      - name: Stop
+        if: always()
+        working-directory: fiap-x-infra
+        run: docker compose down -v
